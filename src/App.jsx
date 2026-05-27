@@ -725,7 +725,7 @@ export default function App() {
               >
                 {p.lastItem && <div className="avatar-item">{p.lastItem.icon}</div>}
 
-                <div className="chair" />
+                <div/>
 
                 <img
                   className="habbo-avatar"
@@ -846,7 +846,7 @@ export default function App() {
             </form>
           </div>
 
-          {isAdmin && item?.id === "helado" && (
+          {isAdmin && item?.id === "helado" && !currentPlayer?.isBot && isMyTurn && (
             <div className="card victims">
               <h3>Elige víctima</h3>
 
