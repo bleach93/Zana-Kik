@@ -229,6 +229,11 @@ body {
     font-size: 15px;
 }
 
+.chat {
+    max-height: 500px;
+    overflow-y: auto;
+}
+
 .checkbox-row {
     display: flex!important;
     align-items: center;

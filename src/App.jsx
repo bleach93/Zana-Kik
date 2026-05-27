@@ -89,6 +89,13 @@ export default function App() {
 
   const [roomId, setRoomId] = useState("");
   const [shareUrl, setShareUrl] = useState("");
+  
+  const chatEndRef = useRef(null);
+    useEffect(() => {
+    chatEndRef.current?.scrollIntoView({
+      behavior: "smooth"
+    });
+  }, [chat]);
 
   const activePlayers = players.filter((p) => p.active);
   const currentPlayer = activePlayers[turn % Math.max(activePlayers.length, 1)];
@@ -564,7 +571,7 @@ export default function App() {
     const text = chatInput.trim();
     if (!text) return;
 
-    const nextChat = [`${ROLE_ICONS[role]} ${habboName || role}: ${text}`, ...chat].slice(0, 8);
+    const nextChat = [...chat,`${ROLE_ICONS[role]} ${habboName || role}: ${text}`].slice(-20);
     setChatInput("");
     setChat(nextChat);
     updateRoom({ chat: nextChat }).catch(console.error);
@@ -862,6 +869,8 @@ export default function App() {
             {chat.map((line, i) => (
               <p key={i}>{line}</p>
             ))}
+
+            <div ref={chatEndRef} />
 
             <form className="chat-input" onSubmit={sendChat}>
               <input
