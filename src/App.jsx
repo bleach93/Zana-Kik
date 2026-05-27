@@ -95,6 +95,7 @@ export default function App() {
 
   const currentPlayerIsBot = currentPlayer?.isBot;
   const isMyTurn = currentPlayer?.id === localUserId.current;
+  const canResolveHelado = item?.id === "helado" && isMyTurn && !currentPlayer?.isBot;
 
   const seats = useMemo(() => {
     const startX = 5;
@@ -246,7 +247,7 @@ export default function App() {
 
   function azar() {
     if (!currentPlayer || activePlayers.length <= 1) return;
-    if (!isAdmin || item?.id !== "helado") return;
+    if (!canResolveHelado) return;
 
     setWaitingKickSelection(false);
     setDrawing(false);
@@ -788,9 +789,9 @@ export default function App() {
               <button
                 className="secondary-btn"
                 onClick={azar}
-                disabled={!isAdmin || item?.id !== "helado"}
+                disabled={!canResolveHelado}
               >
-                {item?.id === "helado" ? "ELEGIR AL “AZAR”" : "AZAR BLOQUEADO"}
+                {canResolveHelado ? "ELEGIR AL “AZAR”" : "AZAR BLOQUEADO"}
               </button>
 
               {isAdmin && (
@@ -846,15 +847,20 @@ export default function App() {
             </form>
           </div>
 
-          {isAdmin && item?.id === "helado" && !currentPlayer?.isBot && isMyTurn && (
+          {canResolveHelado && (
             <div className="card victims">
               <h3>Elige víctima</h3>
 
-              {activePlayers.filter((p) => p.id !== currentPlayer?.id).map((p) => (
-                <button key={p.id} onClick={() => kickPlayer(p.id, "elegido por helado")}>
-                  {p.isBot ? "🤖" : "🧍"} {p.name}
-                </button>
-              ))}
+              {activePlayers
+                .filter((p) => p.id !== currentPlayer?.id)
+                .map((p) => (
+                  <button
+                    key={p.id}
+                    onClick={() => kickPlayer(p.id, "elegido por helado")}
+                  >
+                    {p.isBot ? "🤖" : "🧍"} {p.name}
+                  </button>
+                ))}
             </div>
           )}
         </aside>
