@@ -74,6 +74,10 @@ body {
     align-items: center;
 }
 
+.share-url {
+    padding-bottom: 20px;
+}
+
 .winner-backdrop {
     position: fixed;
     inset: 0;
