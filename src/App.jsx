@@ -304,45 +304,45 @@ export default function App() {
     window.history.pushState(null, "", `/room/${newRoomId}`);
   }
   // Función para unirse a una sala en línea existente, que verifica si la sala existe, si el jugador ya está dentro de la sala, y si no, agrega al jugador a la lista de jugadores de la sala en Firebase, actualiza el registro de eventos de la sala con la entrada del nuevo jugador, y actualiza el estado local con el ID de sala, la URL para compartir, y el rol de jugador. Si la sala no existe, muestra una alerta al usuario.
-  async function joinOnlineRoom(joinRoomId, player) {
+   async function joinOnlineRoom(joinRoomId, player) {
     const roomRef = doc(db, "rooms", joinRoomId);
     const snap = await getDoc(roomRef);
-    // Verificar si el jugador ya está dentro de la sala para evitar agregarlo nuevamente, lo cual puede ocurrir si el jugador intenta unirse a la sala varias veces o si recarga la página después de unirse. Si el jugador ya está dentro, simplemente actualizar el estado local con el ID de sala, la URL para compartir, y el rol de jugador, y cerrar el modal de unión a sala sin modificar la lista de jugadores en Firebase ni el registro de eventos.
-    const alreadyInside = currentPlayers.some(
-      (p) =>
-        p.id === player.id ||
-        p.habboName?.toLowerCase() === player.habboName?.toLowerCase()
-    );
-    // Si el jugador no está dentro de la sala, verificar si la sala existe. Si no existe, mostrar una alerta al usuario. Si existe, agregar al jugador a la lista de jugadores de la sala en Firebase, actualizar el registro de eventos de la sala con la entrada del nuevo jugador, y actualizar el estado local con el ID de sala, la URL para compartir, y el rol de jugador. La función también maneja la navegación a la URL de la sala correspondiente después de unirse.
-    if (alreadyInside) {
-      setRoomId(joinRoomId);
-      setShareUrl(`${window.location.origin}/room/${joinRoomId}`);
-      setShowRoomModal(false);
-      setRole("Jugador");
-      return;
-    }
-    // Verificar si la sala existe. Si no existe, mostrar una alerta al usuario. Si existe, agregar al jugador a la lista de jugadores de la sala en Firebase, actualizar el registro de eventos de la sala con la entrada del nuevo jugador, y actualizar el estado local con el ID de sala, la URL para compartir, y el rol de jugador. La función también maneja la navegación a la URL de la sala correspondiente después de unirse.
+    // Verificar si la sala existe en Firebase antes de intentar unirse, para evitar errores y mostrar una alerta al usuario si la sala no existe. Si la sala existe, verificar si el jugador ya está dentro de la sala para evitar agregarlo nuevamente, y si no está dentro, agregarlo a la lista de jugadores de la sala en Firebase, actualizar el registro de eventos de la sala con la entrada del nuevo jugador, y actualizar el estado local con el ID de sala, la URL para compartir, y el rol de jugador. Si la sala no existe, mostrar una alerta al usuario indicando que la sala no existe.
     if (!snap.exists()) {
       alert("La sala no existe.");
       return;
     }
-    // Agregar al jugador a la lista de jugadores de la sala en Firebase, actualizar el registro de eventos de la sala con la entrada del nuevo jugador, y actualizar el estado local con el ID de sala, la URL para compartir, y el rol de jugador. La función también maneja la navegación a la URL de la sala correspondiente después de unirse.
+    // Verificar si el jugador ya está dentro de la sala para evitar agregarlo nuevamente, y si no está dentro, agregarlo a la lista de jugadores de la sala en Firebase, actualizar el registro de eventos de la sala con la entrada del nuevo jugador, y actualizar el estado local con el ID de sala, la URL para compartir, y el rol de jugador. Si el jugador ya está dentro de la sala, simplemente actualizar el estado local con el ID de sala, la URL para compartir, y el rol de jugador sin modificar la lista de jugadores en Firebase ni el registro de eventos.
     const data = snap.data();
     const currentPlayers = data.players || [];
-    // Verificar si el jugador ya está dentro de la sala para evitar agregarlo nuevamente, lo cual puede ocurrir si el jugador intenta unirse a la sala varias veces o si recarga la página después de unirse. Si el jugador ya está dentro, simplemente actualizar el estado local con el ID de sala, la URL para compartir, y el rol de jugador, y cerrar el modal de unión a sala sin modificar la lista de jugadores en Firebase ni el registro de eventos.
-    const alreadyInside = currentPlayers.some((p) => p.id === player.id);
-    const nextPlayers = alreadyInside ? currentPlayers : [...currentPlayers, player];
-    // Si el jugador no está dentro de la sala, agregarlo a la lista de jugadores de la sala en Firebase, actualizar el registro de eventos de la sala con la entrada del nuevo jugador, y actualizar el estado local con el ID de sala, la URL para compartir, y el rol de jugador. La función también maneja la navegación a la URL de la sala correspondiente después de unirse.
+    // Verificar si el jugador ya está dentro de la sala para evitar agregarlo nuevamente, y si no está dentro, agregarlo a la lista de jugadores de la sala en Firebase, actualizar el registro de eventos de la sala con la entrada del nuevo jugador, y actualizar el estado local con el ID de sala, la URL para compartir, y el rol de jugador. Si el jugador ya está dentro de la sala, simplemente actualizar el estado local con el ID de sala, la URL para compartir, y el rol de jugador sin modificar la lista de jugadores en Firebase ni el registro de eventos.
+    const alreadyInside = currentPlayers.some(
+      (p) =>
+        p.id === player.id ||
+        p.habboName?.toLowerCase() ===
+          player.habboName?.toLowerCase()
+    );
+    // Si el jugador ya está dentro de la sala, simplemente actualizar el estado local con el ID de sala, la URL para compartir, y el rol de jugador sin modificar la lista de jugadores en Firebase ni el registro de eventos. Si el jugador no está dentro de la sala, agregarlo a la lista de jugadores de la sala en Firebase, actualizar el registro de eventos de la sala con la entrada del nuevo jugador, y actualizar el estado local con el ID de sala, la URL para compartir, y el rol de jugador.
+    if (alreadyInside) {
+      setRoomId(joinRoomId);
+      setShareUrl(
+        `${window.location.origin}/room/${joinRoomId}`
+      );
+      setShowRoomModal(false);
+      setRole("Jugador");
+      return;
+    }
+    // Agregar al jugador a la lista de jugadores de la sala en Firebase, actualizar el registro de eventos de la sala con la entrada del nuevo jugador, y actualizar el estado local con el ID de sala, la URL para compartir, y el rol de jugador. Luego, navegar a la URL de la sala correspondiente.
+    const nextPlayers = [...currentPlayers, player];
+    // Actualizar el registro de eventos de la sala con la entrada del nuevo jugador, y actualizar la sala en Firebase con la nueva lista de jugadores y el nuevo registro de eventos. Luego, actualizar el estado local con el ID de sala, la URL para compartir, y el rol de jugador, y navegar a la URL de la sala correspondiente.
     await updateDoc(roomRef, {
       players: nextPlayers,
-      log: [`${player.name} entró a la sala.`, ...(data.log || [])].slice(0, 8),
+      log: [
+        `${player.name} entró a la sala.`,
+        ...(data.log || []),
+      ].slice(0, 8),
     });
-    // Actualizar el estado local con el ID de sala, la URL para compartir, y el rol de jugador, y navegar a la URL de la sala correspondiente
-    setRoomId(joinRoomId);
-    setShareUrl(`${window.location.origin}/room/${joinRoomId}`);
-    setRole("Jugador");
-    setShowRoomModal(false);
-  }
+}
   // Efectos para manejar la sincronización del estado de la sala con Firebase, la lógica de temporizador para avanzar el turno automáticamente, y la lógica de comportamiento de los bots en partidas de prueba, entre otros aspectos relacionados con la dinámica del juego y la interacción con la base de datos en tiempo real. Estos efectos se activan en función de cambios en el estado relevante (como el ID de sala, el jugador actual, el objeto sacado, etc.) y manejan la lógica correspondiente para mantener la experiencia de juego fluida y sincronizada entre los jugadores.
   useEffect(() => {
     const pathRoomId = window.location.pathname.split("/room/")[1];
