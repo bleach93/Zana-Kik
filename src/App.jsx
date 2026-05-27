@@ -1,15 +1,16 @@
+// Imports necesarios para que la aplicación funcione
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { doc, setDoc, updateDoc, onSnapshot, getDoc } from "firebase/firestore";
 import { db } from "./firebase";
-
+// Definición de los alimentos disponibles en el juego, sus efectos y sus íconos
 const FOODS = [
   { id: "agua", name: "Agua", icon: "💧", effect: "No pasa nada" },
   { id: "helado", name: "Helado", icon: "🍦", effect: "Elige a quién kikear" },
   { id: "zanahoria", name: "Zanahoria", icon: "🥕", effect: "Pierdes / kik" },
   { id: "azar", name: "Azar", icon: "🎲", effect: "Bolas cazadoras, pierdes si te toca" },
 ];
-
+// Definicion de los roles del juego y sus íconos correspondientes
 const ROLES = ["Dueño", "Guía", "Jugador"];
 
 const ROLE_ICONS = {
@@ -17,7 +18,7 @@ const ROLE_ICONS = {
   Guía: "🛡️",
   Jugador: "🎮",
 };
-
+// Nombres de bots para partidas de prueba
 const HABBO_BOTS = [
   "Sefos",
   "arturo",
@@ -40,11 +41,11 @@ const HABBO_BOTS = [
   "LeoHabbo",
   "SamPixel",
 ];
-
+// Función auxiliar para seleccionar un elemento aleatorio de una lista
 function random(list) {
   return list[Math.floor(Math.random() * list.length)];
 }
-
+// Función para generar un ID de usuario local y almacenarlo en el almacenamiento local del navegador
 function makeLocalUserId() {
   const saved = localStorage.getItem("zk_user_id");
   if (saved) return saved;
@@ -53,11 +54,11 @@ function makeLocalUserId() {
   localStorage.setItem("zk_user_id", id);
   return id;
 }
-
+// Función para generar un ID de sala aleatorio
 function makeRoomId() {
   return Math.random().toString(36).slice(2, 8).toUpperCase();
 }
-
+// Componente principal de la aplicación que contiene toda la lógica del juego y la interfaz de usuario
 export default function App() {
   const localUserId = useRef(makeLocalUserId());
 
@@ -96,14 +97,14 @@ export default function App() {
       behavior: "smooth"
     });
   }, [chat]);
-
+  // Filtrar los jugadores activos para determinar quién tiene el turno actual, si el jugador actual es un bot, si es el turno del usuario local, y si se puede resolver la acción de sacar helado (es decir, si el objeto sacado es helado, es el turno del usuario local y el jugador actual no es un bot)
   const activePlayers = players.filter((p) => p.active);
   const currentPlayer = activePlayers[turn % Math.max(activePlayers.length, 1)];
-
+  // Variables booleanas para determinar si el jugador actual es un bot, si es el turno del usuario local, y si se puede resolver la acción de sacar helado (es decir, si el objeto sacado es helado, es el turno del usuario local y el jugador actual no es un bot)
   const currentPlayerIsBot = currentPlayer?.isBot;
   const isMyTurn = currentPlayer?.id === localUserId.current;
   const canResolveHelado = item?.id === "helado" && isMyTurn && !currentPlayer?.isBot;
-
+  // Cálculo de las posiciones de los jugadores alrededor de la nevera utilizando useMemo para optimizar el rendimiento
   const seats = useMemo(() => {
     const startX = 5;
     const startY = 28;
@@ -127,7 +128,7 @@ export default function App() {
     if (!roomId) return;
     await updateDoc(doc(db, "rooms", roomId), patch);
   }
-
+  // Función para actualizar el estado local y remoto de la sala con un parche de cambios
   function setLocalAndRemote(patch) {
     if (patch.players) setPlayers(patch.players);
     if (typeof patch.turn === "number") setTurn(patch.turn);
@@ -138,25 +139,25 @@ export default function App() {
     if ("winner" in patch) setWinner(patch.winner);
     updateRoom(patch).catch(console.error);
   }
-
+  // Función para agregar una entrada al registro de eventos del juego y actualizar la sala
   function addLog(text) {
     const nextLog = [text, ...log].slice(0, 8);
     setLog(nextLog);
     updateRoom({ log: nextLog }).catch(console.error);
   }
-
+  // Función para avanzar el turno al siguiente jugador activo, reiniciar el temporizador y actualizar la sala
   function nextTurnFromPlayers(nextPlayers = players) {
     const alive = nextPlayers.filter((p) => p.active);
     if (alive.length <= 1) return turn;
-
+    // Si el jugador actual es eliminado, avanzar el turno al siguiente jugador activo para evitar que quede bloqueado. De lo contrario, avanzar el turno normalmente al siguiente jugador activo.
     const nextTurn = (turn + 1) % alive.length;
     setSeconds(12);
     setTurn(nextTurn);
     updateRoom({ turn: nextTurn }).catch(console.error);
-
+    // Reiniciar estados relacionados con la selección de víctima y el proceso de sacar un objeto, para evitar que queden bloqueados después de eliminar a un jugador o avanzar el turno
     return nextTurn;
   }
-
+  // Función para eliminar a un jugador de la ronda (kikearlo), actualizar el registro de eventos, verificar si hay un ganador y actualizar la sala en consecuencia
   function kickPlayer(id, reason) {
     const victim = players.find((p) => p.id === id);
     if (!victim) return;
@@ -164,23 +165,23 @@ export default function App() {
     const nextPlayers = players.map((p) =>
       p.id === id ? { ...p, active: false } : p
     );
-
+    // Filtrar los jugadores activos después de eliminar al jugador para verificar si solo queda uno y declararlo ganador automáticamente, o avanzar al siguiente turno normalmente si quedan varios jugadores activos
     const alive = nextPlayers.filter((p) => p.active);
     const nextLog = [`${victim.name} fue kikeado: ${reason}.`, ...log].slice(0, 8);
-
+    // Si el jugador eliminado es el que tiene el turno actual, avanzar el turno al siguiente jugador activo para evitar que quede bloqueado
     const patch = {
       players: nextPlayers,
       item: null,
       log: nextLog,
     };
-
+    // Reiniciar estados relacionados con la selección de víctima y el proceso de sacar un objeto, para evitar que queden bloqueados después de eliminar a un jugador
     setWaitingKickSelection(false);
     setDrawing(false);
-
+    // Si el jugador eliminado es el usuario local, mostrar la pantalla de derrota
     if (victim.id === localUserId.current) {
       setLoser(victim);
     }
-
+    // Si solo queda un jugador activo, declararlo ganador y finalizar la ronda. De lo contrario, avanzar al siguiente turno normalmente.
     if (alive.length === 1) {
       patch.winner = alive[0];
       patch.message = `🏆 ${alive[0].name} gana la ronda.`;
@@ -189,59 +190,59 @@ export default function App() {
       patch.turn = (turn + 1) % alive.length;
       patch.message = message;
     }
-
+    // Actualizar el estado local y remoto con los cambios resultantes de eliminar al jugador
     setLocalAndRemote(patch);
   }
-
+  // Función para manejar la acción de sacar un objeto de la nevera, determinar el resultado, actualizar el estado del juego y la sala en consecuencia
   function drawObject() {
     if (!currentPlayer || activePlayers.length <= 1 || drawing) return;
     if (!currentPlayer.isBot && !isMyTurn) return;
-
+    // Iniciar el proceso de sacar un objeto, mostrar un mensaje de acción en curso, y simular una animación de sacar el objeto con un retraso antes de resolver el resultado para mejorar la experiencia de usuario y evitar que la interfaz quede bloqueada durante el proceso
     setDrawing(true);
     setItem(null);
     setMessage(`${currentPlayer.name} está abriendo la nevera...`);
-
+    // Simular el proceso de sacar un objeto con una animación y retrasar la resolución del resultado para mejorar la experiencia de usuario, evitando que quede bloqueada la interfaz durante el proceso
     setTimeout(() => {
       const result = random(FOODS.filter((food) => food.id !== "azar"));
       const nextPlayers = players.map((p) =>
         p.id === currentPlayer.id ? { ...p, lastItem: result } : p
       );
-
+      //  Actualizar el registro de eventos con el resultado de sacar el objeto, y preparar los cambios necesarios para actualizar la sala según el efecto del objeto sacado (avanzar turno, seleccionar víctima, eliminar jugador, etc.) dependiendo del tipo de objeto sacado y su efecto correspondiente
       let nextLog = [`${currentPlayer.name} sacó ${result.name}.`, ...log].slice(0, 8);
       let nextTurn = turn;
       let nextMessage = "";
       let nextItem = result;
-
+      // Reiniciar estados relacionados con la selección de víctima y el proceso de sacar un objeto, para evitar que queden bloqueados después de resolver el resultado
       setDrawing(false);
       setPlayers(nextPlayers);
       setItem(result);
-
+      // Determinar el efecto del objeto sacado y preparar los cambios necesarios para actualizar la sala en consecuencia, como avanzar el turno al siguiente jugador activo, mostrar un mensaje de acción, activar la selección de víctima, eliminar al jugador actual, etc., dependiendo del tipo de objeto sacado y su efecto correspondiente
       if (result.id === "agua") {
         nextMessage = "💧 Agua: no pasa nada. Pasa el siguiente jugador.";
         nextTurn = (turn + 1) % nextPlayers.filter((p) => p.active).length;
         setWaitingKickSelection(false);
       }
-
+      // Si el objeto sacado es helado, activar la selección de víctima para que el jugador actual elija a quién kikear, y mostrar un mensaje de acción correspondiente. La resolución de la selección de víctima se manejará en otra función que se activará al seleccionar a un jugador como víctima.
       if (result.id === "helado") {
         nextMessage = "🍦 Helado: elige un jugador para kikear.";
         setWaitingKickSelection(true);
       }
-
+      // Si el objeto sacado es zanahoria, eliminar al jugador actual de la ronda automáticamente, mostrar un mensaje de acción correspondiente, y avanzar al siguiente turno al siguiente jugador activo para evitar que quede bloqueado el turno después de eliminar al jugador actual. La resolución de la eliminación del jugador se manejará en otra función que se activará después de mostrar el mensaje de acción correspondiente.
       if (result.id === "zanahoria") {
         nextMessage = "🥕 Zanahoria: pierdes y sales de la ronda.";
         setWaitingKickSelection(false);
-
+        // Actualizar el estado local y remoto con los cambios resultantes de eliminar al jugador actual, mostrar el mensaje de acción correspondiente, y avanzar al siguiente turno al siguiente jugador activo para evitar que quede bloqueado el turno después de eliminar al jugador actual. La resolución de la eliminación del jugador se manejará en otra función que se activará después de mostrar el mensaje de acción correspondiente.
         setLocalAndRemote({
           players: nextPlayers,
           item: result,
           log: nextLog,
           message: nextMessage,
         });
-
+        // Agregar un retraso antes de eliminar al jugador actual para permitir que el mensaje de acción se muestre y mejore la experiencia de usuario, evitando que quede bloqueada la interfaz durante el proceso
         setTimeout(() => kickPlayer(currentPlayer.id, "sacó zanahoria"), 500);
         return;
       }
-
+      // Actualizar el estado local y remoto con los cambios resultantes de sacar el objeto, mostrar el mensaje de acción correspondiente, y actualizar el turno si es necesario según el efecto del objeto sacado. La resolución de efectos adicionales como la selección de víctima para el helado o las bolas cazadoras para el azar se manejará en otras funciones que se activarán después de mostrar el mensaje de acción correspondiente.
       setLocalAndRemote({
         players: nextPlayers,
         item: nextItem,
@@ -251,40 +252,40 @@ export default function App() {
       });
     }, 900);
   }
-
+  // Función para manejar la acción de activar el efecto de azar, que consiste en seleccionar aleatoriamente a un jugador como víctima de las bolas cazadoras, eliminarlo de la ronda, mostrar un mensaje de acción correspondiente, y actualizar el registro de eventos y la sala en consecuencia. La función verifica las condiciones necesarias para activar el efecto de azar (que haya un jugador actual, que haya más de un jugador activo, que se pueda resolver el efecto de helado, etc.) antes de proceder con la acción.
   function azar() {
     if (!currentPlayer || activePlayers.length <= 1) return;
     if (!canResolveHelado) return;
-
+    // Iniciar el proceso de activar el efecto de azar, mostrar un mensaje de acción en curso, y simular una animación de activación con un retraso antes de resolver el resultado para mejorar la experiencia de usuario y evitar que la interfaz quede bloqueada durante el proceso
     setWaitingKickSelection(false);
     setDrawing(false);
     setItem(null);
-
+    // Actualizar el registro de eventos con la activación del efecto de azar, y preparar los cambios necesarios para actualizar la sala según el resultado de seleccionar aleatoriamente a un jugador como víctima de las bolas cazadoras, eliminarlo de la ronda, mostrar un mensaje de acción correspondiente, y actualizar el registro de eventos y la sala en consecuencia. La resolución de la selección de víctima y la eliminación del jugador se manejará en otra función que se activará después de mostrar el mensaje de acción correspondiente.
     const nextLog = [`${currentPlayer.name} activó AZAR.`, ...log].slice(0, 8);
     setLog(nextLog);
     setMessage("🎲 AZAR: bolas cazadoras activadas...");
-
+    //  Agregar un retraso antes de resolver el resultado de azar para permitir que el mensaje de acción se muestre y mejore la experiencia de usuario, evitando que quede bloqueada la interfaz durante el proceso
     setTimeout(() => {
       const possibleVictims = activePlayers.filter((p) => p.id !== currentPlayer.id);
       const victim = random(possibleVictims);
-
+      // Si no hay víctimas posibles (lo cual es improbable pero se verifica por seguridad), simplemente actualizar el mensaje de acción y el registro de eventos sin eliminar a ningún jugador
       if (!victim) return;
-
+      // Actualizar el registro de eventos con el resultado de seleccionar aleatoriamente a un jugador como víctima de las bolas cazadoras, eliminarlo de la ronda, mostrar un mensaje de acción correspondiente, y actualizar la sala en consecuencia. La resolución de la eliminación del jugador se manejará en otra función que se activará después de mostrar el mensaje de acción correspondiente.
       const finalLog = [
         `${victim.name} fue alcanzado por las bolas cazadoras.`,
         ...nextLog,
       ].slice(0, 8);
-
+      // Agregar un retraso antes de eliminar al jugador víctima para permitir que el mensaje de acción se muestre y mejore la experiencia de usuario, evitando que quede bloqueada la interfaz durante el proceso
       setLog(finalLog);
       updateRoom({ log: finalLog }).catch(console.error);
       kickPlayer(victim.id, "azar");
     }, 850);
   }
-
+  // Funciones para crear una sala en línea y unirse a una sala existente, que manejan la interacción con la base de datos de Firebase para almacenar y actualizar el estado de la sala, los jugadores, el turno, el registro de eventos, el chat, etc., y actualizan el estado local de la aplicación en consecuencia. Estas funciones también manejan la lógica de verificación de condiciones para unirse a una sala (como verificar si la sala existe, si el jugador ya está dentro, etc.) y para crear una sala (como generar un ID de sala único, establecer el jugador como dueño, etc.), así como la navegación a la URL de la sala correspondiente después de unirse o crear una sala.
   async function createOnlineRoom(roomPlayers) {
     const newRoomId = makeRoomId();
     const url = `${window.location.origin}/room/${newRoomId}`;
-
+    // Crear un nuevo documento en la colección "rooms" de Firebase con el ID de sala generado, y establecer los datos iniciales de la sala como el ID de sala, el ID del dueño, la lista de jugadores, el turno inicial, el objeto sacado inicial, el registro de eventos inicial, el chat inicial, el mensaje inicial, el ganador inicial (null), y la fecha de creación. Luego actualizar el estado local con el ID de sala y la URL para compartir, y navegar a la URL de la sala correspondiente.
     await setDoc(doc(db, "rooms", newRoomId), {
       roomId: newRoomId,
       ownerId: roomPlayers[0].id,
@@ -297,22 +298,22 @@ export default function App() {
       winner: null,
       createdAt: Date.now(),
     });
-
+    // Actualizar el estado local con el ID de sala y la URL para compartir, y navegar a la URL de la sala correspondiente
     setRoomId(newRoomId);
     setShareUrl(url);
     window.history.pushState(null, "", `/room/${newRoomId}`);
   }
-
+  // Función para unirse a una sala en línea existente, que verifica si la sala existe, si el jugador ya está dentro de la sala, y si no, agrega al jugador a la lista de jugadores de la sala en Firebase, actualiza el registro de eventos de la sala con la entrada del nuevo jugador, y actualiza el estado local con el ID de sala, la URL para compartir, y el rol de jugador. Si la sala no existe, muestra una alerta al usuario.
   async function joinOnlineRoom(joinRoomId, player) {
     const roomRef = doc(db, "rooms", joinRoomId);
     const snap = await getDoc(roomRef);
-
+    // Verificar si el jugador ya está dentro de la sala para evitar agregarlo nuevamente, lo cual puede ocurrir si el jugador intenta unirse a la sala varias veces o si recarga la página después de unirse. Si el jugador ya está dentro, simplemente actualizar el estado local con el ID de sala, la URL para compartir, y el rol de jugador, y cerrar el modal de unión a sala sin modificar la lista de jugadores en Firebase ni el registro de eventos.
     const alreadyInside = currentPlayers.some(
       (p) =>
         p.id === player.id ||
         p.habboName?.toLowerCase() === player.habboName?.toLowerCase()
     );
-
+    // Si el jugador no está dentro de la sala, verificar si la sala existe. Si no existe, mostrar una alerta al usuario. Si existe, agregar al jugador a la lista de jugadores de la sala en Firebase, actualizar el registro de eventos de la sala con la entrada del nuevo jugador, y actualizar el estado local con el ID de sala, la URL para compartir, y el rol de jugador. La función también maneja la navegación a la URL de la sala correspondiente después de unirse.
     if (alreadyInside) {
       setRoomId(joinRoomId);
       setShareUrl(`${window.location.origin}/room/${joinRoomId}`);
@@ -320,42 +321,42 @@ export default function App() {
       setRole("Jugador");
       return;
     }
-
+    // Verificar si la sala existe. Si no existe, mostrar una alerta al usuario. Si existe, agregar al jugador a la lista de jugadores de la sala en Firebase, actualizar el registro de eventos de la sala con la entrada del nuevo jugador, y actualizar el estado local con el ID de sala, la URL para compartir, y el rol de jugador. La función también maneja la navegación a la URL de la sala correspondiente después de unirse.
     if (!snap.exists()) {
       alert("La sala no existe.");
       return;
     }
-
+    // Agregar al jugador a la lista de jugadores de la sala en Firebase, actualizar el registro de eventos de la sala con la entrada del nuevo jugador, y actualizar el estado local con el ID de sala, la URL para compartir, y el rol de jugador. La función también maneja la navegación a la URL de la sala correspondiente después de unirse.
     const data = snap.data();
     const currentPlayers = data.players || [];
-
+    // Verificar si el jugador ya está dentro de la sala para evitar agregarlo nuevamente, lo cual puede ocurrir si el jugador intenta unirse a la sala varias veces o si recarga la página después de unirse. Si el jugador ya está dentro, simplemente actualizar el estado local con el ID de sala, la URL para compartir, y el rol de jugador, y cerrar el modal de unión a sala sin modificar la lista de jugadores en Firebase ni el registro de eventos.
     const alreadyInside = currentPlayers.some((p) => p.id === player.id);
     const nextPlayers = alreadyInside ? currentPlayers : [...currentPlayers, player];
-
+    // Si el jugador no está dentro de la sala, agregarlo a la lista de jugadores de la sala en Firebase, actualizar el registro de eventos de la sala con la entrada del nuevo jugador, y actualizar el estado local con el ID de sala, la URL para compartir, y el rol de jugador. La función también maneja la navegación a la URL de la sala correspondiente después de unirse.
     await updateDoc(roomRef, {
       players: nextPlayers,
       log: [`${player.name} entró a la sala.`, ...(data.log || [])].slice(0, 8),
     });
-
+    // Actualizar el estado local con el ID de sala, la URL para compartir, y el rol de jugador, y navegar a la URL de la sala correspondiente
     setRoomId(joinRoomId);
     setShareUrl(`${window.location.origin}/room/${joinRoomId}`);
     setRole("Jugador");
     setShowRoomModal(false);
   }
-
+  // Efectos para manejar la sincronización del estado de la sala con Firebase, la lógica de temporizador para avanzar el turno automáticamente, y la lógica de comportamiento de los bots en partidas de prueba, entre otros aspectos relacionados con la dinámica del juego y la interacción con la base de datos en tiempo real. Estos efectos se activan en función de cambios en el estado relevante (como el ID de sala, el jugador actual, el objeto sacado, etc.) y manejan la lógica correspondiente para mantener la experiencia de juego fluida y sincronizada entre los jugadores.
   useEffect(() => {
     const pathRoomId = window.location.pathname.split("/room/")[1];
     if (!pathRoomId) return;
-
+    // Si hay un ID de sala en la URL, configurar el estado local con el ID de sala, la URL para compartir, y mostrar el modal de unión a sala. Luego, establecer un listener en Firebase para sincronizar el estado de la sala en tiempo real con los cambios en la base de datos, actualizando el estado local con los datos de la sala (jugadores, turno, objeto sacado, registro de eventos, chat, mensaje, ganador, etc.) cada vez que haya un cambio en la sala. El efecto también maneja la limpieza del listener al desmontar el componente para evitar fugas de memoria.
     setRoomId(pathRoomId);
     setShareUrl(`${window.location.origin}/room/${pathRoomId}`);
     setShowRoomModal(true);
-
+    // Establecer un listener en Firebase para sincronizar el estado de la sala en tiempo real con los cambios en la base de datos, actualizando el estado local con los datos de la sala (jugadores, turno, objeto sacado, registro de eventos, chat, mensaje, ganador, etc.) cada vez que haya un cambio en la sala. El efecto también maneja la limpieza del listener al desmontar el componente para evitar fugas de memoria.
     const unsub = onSnapshot(doc(db, "rooms", pathRoomId), (snap) => {
       if (!snap.exists()) return;
-
+      // Actualizar el estado local con los datos de la sala cada vez que haya un cambio en la sala, para mantener la experiencia de juego sincronizada entre los jugadores. Esto incluye actualizar la lista de jugadores, el turno actual, el objeto sacado, el registro de eventos, el chat, el mensaje, el ganador, etc., según los datos almacenados en Firebase.
       const room = snap.data();
-
+      // Actualizar el estado local con los datos de la sala cada vez que haya un cambio en la sala, para mantener la experiencia de juego sincronizada entre los jugadores. Esto incluye actualizar la lista de jugadores, el turno actual, el objeto sacado, el registro de eventos, el chat, el mensaje, el ganador, etc., según los datos almacenados en Firebase.
       setPlayers(room.players || []);
       setTurn(room.turn || 0);
       setItem(room.item || null);
@@ -363,15 +364,15 @@ export default function App() {
       setChat(room.chat || []);
       setMessage(room.message || "¡Saca un objeto de la nevera!");
       setWinner(room.winner || null);
-
+      // Verificar si el jugador local está dentro de la sala cada vez que haya un cambio en la sala, para determinar si se debe mostrar el modal de unión a sala o no, y para actualizar el rol del jugador local según su estado en la sala (dueño, guía, jugador, etc.). Si el jugador local no está dentro de la sala, mostrar el modal de unión a sala para permitir que se una. Si el jugador local está dentro de la sala, ocultar el modal de unión a sala y actualizar el rol del jugador local según su estado en la sala.
       const me = (room.players || []).find(
         (p) => p.id === localUserId.current
       );
-
+      // Si el jugador local está dentro de la sala, ocultar el modal de unión a sala y actualizar el rol del jugador local según su estado en la sala. Si el jugador local no está dentro de la sala, mostrar el modal de unión a sala para permitir que se una.
       if (me) {
         setShowRoomModal(false);
         setHabboName(me.habboName || me.name || "");
-
+        // Actualizar el rol del jugador local según su estado en la sala (dueño, guía, jugador, etc.) cada vez que haya un cambio en la sala, para reflejar correctamente su rol en la experiencia de juego. Esto se determina principalmente por la propiedad "isOwner" del jugador local, pero también se puede extender para incluir otras condiciones o roles adicionales si se desea.
         if (me.isOwner) {
           setRole("Dueño");
         } else {
@@ -381,18 +382,18 @@ export default function App() {
         setShowRoomModal(false);
       }
     });
-
+    // Limpiar el listener de Firebase al desmontar el componente para evitar fugas de memoria y asegurar que no haya listeners activos innecesarios cuando el componente ya no está en uso.
     return () => unsub();
   }, []);
-
+  // Efecto para sincronizar el estado de la sala con Firebase en tiempo real, actualizando el estado local cada vez que haya un cambio en la sala (jugadores, turno, objeto sacado, registro de eventos, chat, mensaje, ganador, etc.) para mantener la experiencia de juego sincronizada entre los jugadores. El efecto se activa cada vez que cambia el ID de sala (roomId) y establece un listener en Firebase para escuchar los cambios en la sala correspondiente, actualizando el estado local con los datos de la sala cada vez que haya un cambio. El efecto también maneja la limpieza del listener al desmontar el componente para evitar fugas de memoria.
   useEffect(() => {
     if (!roomId) return;
-
+    // Establecer un listener en Firebase para sincronizar el estado de la sala en tiempo real con los cambios en la base de datos, actualizando el estado local con los datos de la sala (jugadores, turno, objeto sacado, registro de eventos, chat, mensaje, ganador, etc.) cada vez que haya un cambio en la sala. El efecto también maneja la limpieza del listener al desmontar el componente para evitar fugas de memoria.
     const unsub = onSnapshot(doc(db, "rooms", roomId), (snap) => {
       if (!snap.exists()) return;
-
+      // Actualizar el estado local con los datos de la sala cada vez que haya un cambio en la sala, para mantener la experiencia de juego sincronizada entre los jugadores. Esto incluye actualizar la lista de jugadores, el turno actual, el objeto sacado, el registro de eventos, el chat, el mensaje, el ganador, etc., según los datos almacenados en Firebase.
       const room = snap.data();
-
+      //  Actualizar el estado local con los datos de la sala cada vez que haya un cambio en la sala, para mantener la experiencia de juego sincronizada entre los jugadores. Esto incluye actualizar la lista de jugadores, el turno actual, el objeto sacado, el registro de eventos, el chat, el mensaje, el ganador, etc., según los datos almacenados en Firebase.
       setPlayers(room.players || []);
       setTurn(room.turn || 0);
       setItem(room.item || null);
@@ -401,77 +402,77 @@ export default function App() {
       setMessage(room.message || "¡Saca un objeto de la nevera!");
       setWinner(room.winner || null);
     });
-
+    // Limpiar el listener de Firebase al desmontar el componente para evitar fugas de memoria y asegurar que no haya listeners activos innecesarios cuando el componente ya no está en uso.
     return () => unsub();
   }, [roomId]);
-
+  // Efecto para manejar la lógica del temporizador que avanza el turno automáticamente después de un tiempo determinado (12 segundos) si el jugador actual no realiza una acción (sacar un objeto, seleccionar víctima, etc.) dentro de ese tiempo. El efecto se activa cada vez que cambian el jugador actual, el objeto sacado, la cantidad de jugadores activos, o si hay un ganador, y maneja la lógica para avanzar el turno al siguiente jugador activo automáticamente cuando se agota el tiempo, evitando que quede bloqueado el turno si un jugador no realiza una acción a tiempo. El efecto también maneja la limpieza del temporizador al desmontar el componente o al cambiar las dependencias relevantes para evitar que queden temporizadores activos innecesarios.
   useEffect(() => {
     if (!currentPlayer || activePlayers.length <= 1 || item?.id === "helado" || winner) return;
-
+    // Reiniciar el temporizador a 12 segundos cada vez que cambian el jugador actual, el objeto sacado, la cantidad de jugadores activos, o si hay un ganador, para dar a cada jugador un tiempo limitado para realizar su acción antes de que el turno avance automáticamente al siguiente jugador activo. El efecto también maneja la lógica para avanzar el turno al siguiente jugador activo automáticamente cuando se agota el tiempo, evitando que quede bloqueado el turno si un jugador no realiza una acción a tiempo.
     setSeconds(12);
-
+    // Iniciar un temporizador que se ejecuta cada segundo para decrementar el contador de segundos, y cuando el contador llega a 0, avanzar el turno al siguiente jugador activo automáticamente si el jugador actual no realizó una acción a tiempo. El efecto también maneja la lógica para evitar que el turno avance automáticamente si ya hay un ganador o si el objeto sacado es helado (lo cual requiere una acción específica del jugador), y para evitar que el turno avance automáticamente si ya se está en proceso de selección de víctima o de sacar un objeto para evitar que quede bloqueada la interfaz durante esos procesos.
     const timer = setInterval(() => {
       setSeconds((prev) => {
         if (prev <= 1) {
           if (!timerLock.current) {
             timerLock.current = true;
-
+            // Avanzar el turno al siguiente jugador activo automáticamente cuando se agota el tiempo, evitando que quede bloqueado el turno si un jugador no realiza una acción a tiempo. El efecto también maneja la lógica para evitar que el turno avance automáticamente si ya hay un ganador o si el objeto sacado es helado (lo cual requiere una acción específica del jugador), y para evitar que el turno avance automáticamente si ya se está en proceso de selección de víctima o de sacar un objeto para evitar que quede bloqueada la interfaz durante esos procesos.
             const nextTurn = (turn + 1) % activePlayers.length;
             setTurn(nextTurn);
             updateRoom({ turn: nextTurn }).catch(console.error);
-
+            // Reiniciar el temporizador a 12 segundos para el siguiente jugador activo, y evitar que quede bloqueada la interfaz durante el proceso de avance de turno automático.
             setTimeout(() => {
               timerLock.current = false;
             }, 200);
           }
-
+          // Devolver 12 para reiniciar el contador de segundos para el siguiente jugador activo después de avanzar el turno automáticamente, y evitar que quede bloqueada la interfaz durante el proceso de avance de turno automático.
           return 12;
         }
-
+        // Decrementar el contador de segundos cada segundo para dar a cada jugador un tiempo limitado para realizar su acción antes de que el turno avance automáticamente al siguiente jugador activo, y evitar que quede bloqueada la interfaz durante el proceso de espera.
         return prev - 1;
       });
     }, 1000);
-
+    // Limpiar el temporizador al desmontar el componente o al cambiar las dependencias relevantes para evitar que queden temporizadores activos innecesarios, y asegurar que no haya temporizadores corriendo en segundo plano cuando el componente ya no está en uso o cuando cambian las condiciones del juego.
     return () => clearInterval(timer);
   }, [currentPlayer?.id, item?.id, activePlayers.length, winner, turn]);
-
+  // Efecto para manejar la lógica de comportamiento de los bots en partidas de prueba, que consiste en que los bots saquen un objeto automáticamente después de un tiempo determinado (1.2 segundos) si es su turno y no están en proceso de sacar un objeto o seleccionar víctima, y si el objeto sacado no es helado (lo cual requiere una acción específica del jugador). El efecto se activa cada vez que cambian el jugador actual, el objeto sacado, la cantidad de jugadores activos, o si hay un ganador, y maneja la lógica para que los bots realicen su acción automáticamente cuando es su turno, evitando que quede bloqueada la interfaz durante el proceso.
   useEffect(() => {
     if (!currentPlayer?.isBot) return;
     if (drawing) return;
     if (item?.id === "helado") return;
     if (activePlayers.length <= 1) return;
     if (winner) return;
-
+    // Iniciar un temporizador que se ejecuta después de 1.2 segundos para que el bot saque un objeto automáticamente si es su turno y no está en proceso de sacar un objeto o seleccionar víctima, y si el objeto sacado no es helado (lo cual requiere una acción específica del jugador). El efecto también maneja la lógica para evitar que el bot saque un objeto automáticamente si ya hay un ganador o si el objeto sacado es helado, y para evitar que el bot saque un objeto automáticamente si ya se está en proceso de selección de víctima o de sacar un objeto para evitar que quede bloqueada la interfaz durante esos procesos.
     const botTimer = setTimeout(() => {
       drawObject();
     }, 1200);
-
+    // Limpiar el temporizador al desmontar el componente o al cambiar las dependencias relevantes para evitar que queden temporizadores activos innecesarios, y asegurar que no haya temporizadores corriendo en segundo plano cuando el componente ya no está en uso o cuando cambian las condiciones del juego.
     return () => clearTimeout(botTimer);
   }, [currentPlayer?.id, drawing, item?.id, activePlayers.length, winner]);
-
+  // Efecto para manejar la lógica de comportamiento de los bots en partidas de prueba específicamente para el caso de sacar helado, que consiste en que los bots seleccionen automáticamente a una víctima para kikear después de sacar helado, si es su turno, si el objeto sacado es helado, y si no hay un ganador. El efecto se activa cada vez que cambian el jugador actual, el objeto sacado, la cantidad de jugadores activos, o si hay un ganador, y maneja la lógica para que los bots realicen su acción automáticamente cuando sacan helado, evitando que quede bloqueada la interfaz durante el proceso.
   useEffect(() => {
     if (!currentPlayer?.isBot) return;
     if (item?.id !== "helado") return;
     if (winner) return;
-
+    // Iniciar un temporizador que se ejecuta después de 1.4 segundos para que el bot seleccione automáticamente a una víctima para kikear después de sacar helado, si es su turno, si el objeto sacado es helado, y si no hay un ganador. El efecto también maneja la lógica para evitar que el bot seleccione una víctima automáticamente si ya hay un ganador o si el objeto sacado no es helado, y para evitar que el bot seleccione una víctima automáticamente si ya se está en proceso de selección de víctima o de sacar un objeto para evitar que quede bloqueada la interfaz durante esos procesos.
     const botKickTimer = setTimeout(() => {
       const victims = activePlayers.filter((p) => p.id !== currentPlayer.id);
       const victim = random(victims);
-
+      // Si no hay víctimas posibles (lo cual es improbable pero se verifica por seguridad), simplemente salir de la función sin seleccionar a ningún jugador ni realizar ninguna acción, para evitar que quede bloqueada la interfaz durante el proceso de selección de víctima automática.
       if (!victim) return;
-
+      // Actualizar el registro de eventos con la selección automática de víctima por parte del bot después de sacar helado, mostrar un mensaje de acción correspondiente, y eliminar al jugador seleccionado como víctima de la ronda. La resolución de la eliminación del jugador se manejará en otra función que se activará después de mostrar el mensaje de acción correspondiente.
       addLog(`${currentPlayer.name} eligió al azar a ${victim.name} con helado.`);
       kickPlayer(victim.id, "elegido por bot con helado");
     }, 1400);
-
+    // Limpiar el temporizador al desmontar el componente o al cambiar las dependencias relevantes para evitar que queden temporizadores activos innecesarios, y asegurar que no haya temporizadores corriendo en segundo plano cuando el componente ya no está en uso o cuando cambian las condiciones del juego.
     return () => clearTimeout(botKickTimer);
   }, [currentPlayer?.id, item?.id, activePlayers.length, winner]);
-
+  // Funciones para crear una sala, unirse a una sala, salir de una sala, reiniciar el juego, y enviar mensajes de chat, que manejan la lógica correspondiente para cada acción, incluyendo la interacción con Firebase para actualizar el estado de la sala en línea, la actualización del estado local de la aplicación, y la navegación a las URLs correspondientes. Estas funciones también manejan la lógica de verificación de condiciones para cada acción (como verificar si la sala existe, si el jugador ya está dentro, si es el dueño de la sala, etc.) y actualizan el registro de eventos y los mensajes de acción en consecuencia para mantener la experiencia de juego fluida y coherente.
   async function createRoom(e) {
     e.preventDefault();
-
+    // Verificar si hay un ID de sala en la URL para determinar si se va a crear una sala nueva o unirse a una sala existente, y preparar los datos del jugador local (ID, nombre, rol, etc.) para crear o unirse a la sala en consecuencia. Si hay un ID de sala en la URL, intentar unirse a esa sala con los datos del jugador local. Si no hay un ID de sala en la URL, crear una nueva sala con los datos del jugador local como dueño, y agregar bots si es una partida de prueba.
     const pathRoomId = window.location.pathname.split("/room/")[1];
-
+    // Preparar los datos del jugador local (ID, nombre, rol, etc.) para crear o unirse a la sala en consecuencia. El jugador local se identifica principalmente por su ID único generado al cargar la aplicación, y puede proporcionar un nombre de Habbo opcional para personalizar su experiencia. El rol del jugador local se determina principalmente por si es el dueño de la sala o no, pero también se puede extender para incluir otras condiciones o roles adicionales si se desea.
     const ownerPlayer = {
       id: localUserId.current,
       name: habboName || "Dueño",
@@ -482,7 +483,7 @@ export default function App() {
       isOwner: !pathRoomId,
       isBot: false,
     };
-
+    // Si hay un ID de sala en la URL, intentar unirse a esa sala con los datos del jugador local. Si no hay un ID de sala en la URL, crear una nueva sala con los datos del jugador local como dueño, y agregar bots si es una partida de prueba. La función también maneja la navegación a la URL de la sala correspondiente después de unirse o crear una sala.
     if (pathRoomId) {
       await joinOnlineRoom(pathRoomId, {
         ...ownerPlayer,
@@ -490,7 +491,7 @@ export default function App() {
       });
       return;
     }
-
+    // Si es una partida de prueba, crear una nueva sala con los datos del jugador local como dueño, y agregar bots a la sala para simular una experiencia de juego completa. La función también maneja la navegación a la URL de la sala correspondiente después de crear la sala.
     if (testMode) {
       const bots = Array.from({ length: Number(roomSize) - 1 }, (_, i) => {
         const botHabbo = HABBO_BOTS[i % HABBO_BOTS.length];
@@ -505,9 +506,9 @@ export default function App() {
           isBot: true,
         };
       });
-
+      // Crear una nueva sala con los datos del jugador local como dueño, y agregar bots a la sala para simular una experiencia de juego completa. La función también maneja la navegación a la URL de la sala correspondiente después de crear la sala.
       const roomPlayers = [ownerPlayer, ...bots];
-
+      // Actualizar el estado local con la lista de jugadores de la sala (jugador local como dueño y bots), el rol del jugador local como dueño, habilitar la opción de jugar contra bots, y cerrar el modal de creación de sala. Luego, crear la sala en Firebase con la lista de jugadores preparada, y navegar a la URL de la sala correspondiente.
       setPlayers(roomPlayers);
       setRole("Dueño");
       setAiEnabled(true);
@@ -515,39 +516,39 @@ export default function App() {
       await createOnlineRoom(roomPlayers);
       return;
     }
-
+    // Crear una nueva sala con los datos del jugador local como dueño, y sin bots, para una experiencia de juego tradicional. La función también maneja la navegación a la URL de la sala correspondiente después de crear la sala.
     setPlayers([ownerPlayer]);
     setRole("Dueño");
     setAiEnabled(false);
     setShowRoomModal(false);
     await createOnlineRoom([ownerPlayer]);
   }
-
+  // Función para salir de una sala, que maneja la lógica para eliminar al jugador de la lista de jugadores de la sala en Firebase, actualizar el registro de eventos de la sala con la salida del jugador, y actualizar el estado local para reflejar que el jugador ha salido de la sala. Si el jugador que sale es el jugador local, también muestra el modal de unión a sala para permitir que se una a otra sala o cree una nueva, y restablece su rol a "Jugador".
   async function leaveRoom(playerId) {
     const nextPlayers = players.filter((p) => p.id !== playerId);
-
+     // Actualizar el estado local para reflejar que el jugador ha salido de la sala, y si el jugador que sale es el jugador local, también mostrar el modal de unión a sala para permitir que se una a otra sala o cree una nueva, y restablecer su rol a "Jugador". Luego, si hay un ID de sala válido, actualizar la sala en Firebase para eliminar al jugador de la lista de jugadores de la sala, actualizar el registro de eventos de la sala con la salida del jugador, y mantener la experiencia de juego fluida y coherente para los jugadores restantes.
     setPlayers(nextPlayers);
-
+    //  Actualizar la sala en Firebase para eliminar al jugador de la lista de jugadores de la sala, actualizar el registro de eventos de la sala con la salida del jugador, y mantener la experiencia de juego fluida y coherente para los jugadores restantes. Esto se hace principalmente para asegurar que el estado de la sala en línea refleje correctamente la salida del jugador, y para informar a los jugadores restantes sobre la salida a través del registro de eventos.
     if (roomId) {
       await updateRoom({
         players: nextPlayers,
         log: [`${players.find((p) => p.id === playerId)?.name || "Un jugador"} salió de la sala.`, ...log].slice(0, 8),
       });
     }
-
+    // Si el jugador que sale es el jugador local, también mostrar el modal de unión a sala para permitir que se una a otra sala o cree una nueva, y restablecer su rol a "Jugador". Esto se hace principalmente para asegurar que el jugador local tenga la oportunidad de seguir participando en el juego, ya sea uniéndose a otra sala existente o creando una nueva sala, después de salir de la sala actual.
     if (playerId === localUserId.current) {
       setShowRoomModal(true);
       setRole("Jugador");
     }
   }
-
+  // Función para reiniciar el juego, que maneja la lógica para restablecer el estado de la sala a su estado inicial para comenzar una nueva partida, manteniendo a los jugadores en la sala pero restableciendo sus estados individuales (activo, último objeto sacado, etc.) y el estado general del juego (turno, objeto sacado, ganador, mensaje, registro de eventos, etc.) para reflejar el inicio de una nueva partida. La función también actualiza el estado local y la sala en Firebase con los datos restablecidos para mantener la experiencia de juego fluida y coherente.
   function reset() {
     const nextPlayers = players.map((p) => ({
       ...p,
       active: true,
       lastItem: null,
     }));
-
+    // Restablecer el estado de la sala a su estado inicial para comenzar una nueva partida, manteniendo a los jugadores en la sala pero restableciendo sus estados individuales (activo, último objeto sacado, etc.) y el estado general del juego (turno, objeto sacado, ganador, mensaje, registro de eventos, etc.) para reflejar el inicio de una nueva partida. La función también actualiza el estado local y la sala en Firebase con los datos restablecidos para mantener la experiencia de juego fluida y coherente.
     const patch = {
       players: nextPlayers,
       turn: 0,
@@ -556,7 +557,7 @@ export default function App() {
       message: "¡Saca un objeto de la nevera!",
       log: ["Juego reiniciado. Los jugadores siguen en la sala."],
     };
-
+    // Restablecer el estado de la sala a su estado inicial para comenzar una nueva partida, manteniendo a los jugadores en la sala pero restableciendo sus estados individuales (activo, último objeto sacado, etc.) y el estado general del juego (turno, objeto sacado, ganador, mensaje, registro de eventos, etc.) para reflejar el inicio de una nueva partida. La función también actualiza el estado local y la sala en Firebase con los datos restablecidos para mantener la experiencia de juego fluida y coherente.
     setSeconds(12);
     setDrawing(false);
     setWinner(null);
@@ -564,23 +565,23 @@ export default function App() {
     setWaitingKickSelection(false);
     setLocalAndRemote(patch);
   }
-
+  // Función para enviar mensajes de chat, que maneja la lógica para agregar el mensaje del jugador al chat de la sala, actualizar el estado local del chat, y actualizar la sala en Firebase con el nuevo mensaje de chat para mantener la experiencia de juego fluida y coherente. La función también verifica si el mensaje enviado es un comando especial (como "azar" para seleccionar una víctima al azar) y ejecuta la acción correspondiente si el jugador tiene los permisos necesarios (como ser administrador).
   async function sendChat(e) {
     e.preventDefault();
-
+    // Verificar si el mensaje de chat ingresado no está vacío después de eliminar los espacios en blanco, para evitar enviar mensajes vacíos al chat de la sala. Si el mensaje está vacío, simplemente salir de la función sin realizar ninguna acción, para mantener la experiencia de juego fluida y coherente.
     const text = chatInput.trim();
     if (!text) return;
-
+    // Agregar el mensaje del jugador al chat de la sala, actualizar el estado local del chat, y actualizar la sala en Firebase con el nuevo mensaje de chat para mantener la experiencia de juego fluida y coherente. El mensaje se formatea para incluir el ícono del rol del jugador, su nombre de Habbo (o su rol si no tiene un nombre de Habbo), y el texto del mensaje. Luego, se actualiza el estado local del chat con el nuevo mensaje agregado, y se actualiza la sala en Firebase para reflejar el nuevo estado del chat.
     const nextChat = [...chat,`${ROLE_ICONS[role]} ${habboName || role}: ${text}`].slice(-20);
     setChatInput("");
     setChat(nextChat);
     updateRoom({ chat: nextChat }).catch(console.error);
-
+    // Verificar si el mensaje enviado es un comando especial (como "azar" para seleccionar una víctima al azar) y ejecutar la acción correspondiente si el jugador tiene los permisos necesarios (como ser administrador). Esto se hace principalmente para permitir que los jugadores con roles especiales (dueño, guía, etc.) puedan ejecutar comandos específicos a través del chat para interactuar con la dinámica del juego de manera más fluida y sin necesidad de interfaces adicionales.
     if (text.toLowerCase() === "azar" && isAdmin) {
       azar();
     }
   }
-
+  // Renderizar la interfaz de usuario de la aplicación, que incluye el encabezado con el título y el botón para abandonar la sala, el panel lateral con la información del rol del jugador y la lista de jugadores, el área principal con el mensaje de acción, el objeto sacado, el registro de eventos, el chat, y los modales para crear/unirse a una sala, mostrar al ganador, y mostrar al perdedor. La interfaz también incluye estilos para mejorar la apariencia visual y la experiencia de usuario.
   return (
     <div className="zk-page">
       <style>{css}</style>
