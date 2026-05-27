@@ -300,6 +300,20 @@ export default function App() {
     const roomRef = doc(db, "rooms", joinRoomId);
     const snap = await getDoc(roomRef);
 
+    const alreadyInside = currentPlayers.some(
+      (p) =>
+        p.id === player.id ||
+        p.habboName?.toLowerCase() === player.habboName?.toLowerCase()
+    );
+
+    if (alreadyInside) {
+      setRoomId(joinRoomId);
+      setShareUrl(`${window.location.origin}/room/${joinRoomId}`);
+      setShowRoomModal(false);
+      setRole("Jugador");
+      return;
+    }
+
     if (!snap.exists()) {
       alert("La sala no existe.");
       return;
@@ -343,9 +357,22 @@ export default function App() {
       setMessage(room.message || "¡Saca un objeto de la nevera!");
       setWinner(room.winner || null);
 
-      const me = (room.players || []).find((p) => p.id === localUserId.current);
-      if (me?.isOwner) setRole("Dueño");
-      else if (me) setRole("Jugador");
+      const me = (room.players || []).find(
+        (p) => p.id === localUserId.current
+      );
+
+      if (me) {
+        setShowRoomModal(false);
+        setHabboName(me.habboName || me.name || "");
+
+        if (me.isOwner) {
+          setRole("Dueño");
+        } else {
+          setRole("Jugador");
+        }
+      } else {
+        setShowRoomModal(false);
+      }
     });
 
     return () => unsub();
